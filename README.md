@@ -474,15 +474,44 @@ iex> pid = genserver
 iex> Process.whereis TestSuper.Supervisor
 #=> #PID<0.242.0>
 
-Process.alive?(pid(0,240,0)) #=> true
-Process.alive?(pid(0,241,0)) #=> true
-Process.alive?(pid(0,242,0)) #=> true
-Process.alive?(pid(0,268,0)) #=> true
+iex> Process.alive?(pid(0,240,0)) #=> true
+iex> Process.alive?(pid(0,241,0)) #=> true
+iex> Process.alive?(pid(0,242,0)) #=> true
+iex> Process.alive?(pid(0,268,0)) #=> true
 
-Process.info(pid(0,240,0))
-Process.info(pid(0,241,0))
-Process.info(pid(0,242,0))
-Process.info(pid(0,268,0))
+iex> Process.info(pid(0,240,0))
+iex> Process.info(pid(0,241,0))
+iex> Process.info(pid(0,242,0))
+iex> Process.info(pid(0,268,0))
 ```
+
+## GenServer by storing some key/value pairs
+
+So, let's try this out first with our client API.
+
+```bash
+iex> pid = genserver        #=> #PID<0.245.0>
+iex> put(pid, :foo, "bar")  #=> :ok
+iex> get(pid)               #=> %{foo: "bar"}
+iex> put(pid, :baz, 123)    #=> :ok
+iex> get(pid)               #=> %{baz: 123, foo: "bar"}
+iex> get(pid, :foo)         #=> "bar"
+iex> get(pid, :baz)         #=> 123
+```
+
+Now we can also inspect the guts of the `GenServer` process with
+the `Observer` tool we saw in an earlier post: `:observer.start`
+
+Now if we scoot over to the Processes tab we can locate the `GenServer`
+process, by sorting on the Pid or Name column:
+`Elixir.TestSuper.Server.<0.245.0>`. This is the name that we registered
+for the process. Also, under the Current Function heading we see the
+current function identified as `gen_server:loop/7`. So, we are indeed
+running a `GenServer` process. Now selecting the State tab, we can see
+the actual state stored in the process and it's an empty map. If we now
+put a couple key/value pairs as before and again inspect the state we
+see now we have a map with entries.
+
+So, that's a `GenServer` process storing key/value state.
 
 ### 1 November 2018 by Oleg G.Kapranov
