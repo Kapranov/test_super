@@ -272,6 +272,12 @@ defmodule TestSuper do
   """
 end
 
+defmodule TestSuper do
+  @moduledoc """
+  Top-level module used in "Robust compute for RDF queries".
+  """
+end
+
 defmodule TestSuper.Client do
   @moduledoc """
   Module providing client-side functions for `GenServer`.

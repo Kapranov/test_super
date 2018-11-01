@@ -1,5 +1,7 @@
 defmodule TestSuper.Application do
-  @moduledoc false
+  @moduledoc """
+  Module providing the `Application` start function.
+  """
 
   use Application
 
