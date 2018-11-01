@@ -291,4 +291,198 @@ defmodule TestSuper.Server do
 end
 ```
 
+## Implement a `GenServer`
+
+Recall that a `GenServer` is a process with an OTP behaviour and OTP
+defines the server functionality. All we need to do is to add in
+client-side functionality via the callbacks. And also, to start up the
+process.
+
+So let's now flesh this out.
+
+```elixir
+# lib/test_super/server.ex
+defmodule TestSuper.Server do
+  @moduledoc """
+  Module providing server-side functions for `GenServer`.
+  """
+
+  use GenServer
+
+  ## Constructor
+
+  @doc """
+  Constructor for `GenServer`.
+  """
+  def start_link(opts \\ []) do
+    case GenServer.start_link(__MODULE__, opts) do
+      {:ok, pid} ->
+        # register process name
+        num = String.replace("#{inspect pid}", "#PID", "")
+        Process.register(pid, Module.concat(__MODULE__, num))
+        {:ok, pid}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  ## Callbacks
+
+  @doc """
+  Server callback `init/1`.
+  """
+  def init(_) do
+    {:ok, Map.new}
+  end
+
+  @doc """
+  Server callback `handle_call/3` for client `get/1`.
+  """
+  def handle_call({:get}, _from, state) do
+    {:reply, state, state}
+  end
+
+  @doc """
+  Server callback `handle_call/3` for client `get/2`.
+  """
+  def handle_call({:get, key}, _from, state) do
+    {:reply, Map.fetch!(state, key), state}
+  end
+
+  @doc """
+  Server callback `handle_call/3` for client `keys/0`.
+  """
+  def handle_call({:keys}, _from, state) do
+    {:reply, Map.keys(state), state}
+  end
+
+  @doc """
+  Server callback `handle_cast/2` for client `put/3`.
+  """
+  def handle_cast({:put, key, value}, state) do
+    {:noreply, Map.put(state, key, value)}
+  end
+end
+```
+
+On the server side, we can implement a variety of callbacks to guarantee
+server initialization, termination, and handling of requests. We are
+just going to implement these three callbacks for initialization and
+request  handling:
+
+* `init/1` - intialize the server
+* `handle_call/3` - service a `call/2` client request (for reads)
+* `handle_cast/2` - service a `cast/2` client request (for writes)
+
+Since we're going to use this `GenServer` to manage a key/value store
+we'll use a `Map` to implement this. This is set up by the `init/1`
+callback.
+
+Often the client functions (calls) and server functions (callbacks) will
+be placed together in the server module.  Here, however, we have made a
+cleaner separation and put our client calls into a `TestSuper.Client`
+module and kept the server callbacks in the `TestSuper.Server` module.
+
+Here's our `TestSuper.Client` module calls.
+
+```elixir
+# lib/test_super/client.ex
+defmodule TestSuper.Client do
+  @moduledoc """
+  Module providing client-side functions for `GenServer`.
+  """
+
+  ## Calls
+
+  @doc """
+  Return map stored by `GenServer` with process ID `pid`.
+  """
+  def get(pid) do
+    GenServer.call(pid, {:get})
+  end
+
+  @doc """
+  Return value for `key` stored by `GenServer` with process ID `pid`.
+  """
+  def get(pid, key) do
+    GenServer.call(pid, {:get, key})
+  end
+
+  @doc """
+  Return list of keys for `GenServer` with process ID `pid`.
+  """
+  def keys(pid) do
+    GenServer.call(pid, {:keys})
+  end
+
+  @doc """
+  Store `value` by `key` for `GenServer` with process ID `pid`.
+  """
+  def put(pid, key, value) do
+    GenServer.cast(pid, {:put, key, value})
+  end
+end
+```
+
+This is just for demo purposes so we only define some basic read/write
+functions (`get/1`, `get/2` and `put/3`). We don't have any update or
+delete functions but they are easy to add.
+
+So far, so good. We just need a more friendly way of starting our
+`GenServer`. We'll add this `genserver/0` constructor to our main module
+`TestSuper`.
+
+```elixir
+# lib/test_super.ex
+defmodule TestSuper do
+  @moduledoc """
+  Top-level module used in "Robust compute for RDF queries".
+  """
+
+  alias TestSuper.Server
+
+  @doc """
+  Constructor for new `GenServer` (with no supervision).
+
+  Returns process ID for `GenServer`.
+  """
+  def genserver do
+    opts = [
+    ]
+    case Server.start_link(opts) do
+      {:ok, pid} ->
+        IO.puts "TestSuper.Server is starting ... #{inspect pid}"
+        pid
+      {:error, reason} ->
+        IO.puts "! Error: #{inspect reason}"
+    end
+  end
+end
+```
+
+We're now all set.
+
+And check out it `iex -S mix` and `:observer.start` and you will see
+in section an application:
+
+```bash
+<0.240.0> -> <0.241.0> -> <Elixir.TestSuper.Supervisor>
+
+iex> pid = genserver
+#=> TestSuper.Server is starting ... #PID<0.268.0>
+#=> #PID<0.268.0>
+
+iex> Process.whereis TestSuper.Supervisor
+#=> #PID<0.242.0>
+
+Process.alive?(pid(0,240,0)) #=> true
+Process.alive?(pid(0,241,0)) #=> true
+Process.alive?(pid(0,242,0)) #=> true
+Process.alive?(pid(0,268,0)) #=> true
+
+Process.info(pid(0,240,0))
+Process.info(pid(0,241,0))
+Process.info(pid(0,242,0))
+Process.info(pid(0,268,0))
+```
+
 ### 1 November 2018 by Oleg G.Kapranov
