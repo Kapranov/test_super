@@ -29,10 +29,13 @@ defmodule TestSuper.MixProject do
   defp deps do
     [
       {:credo, "~> 0.10.0", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.19.1", only: :dev, runtime: false},
       {:exchalk, "~> 1.0.2" },
       {:excoveralls, "~> 0.10.1", only: :test},
       {:ex_unit_notifier, "~> 0.1.4", only: :test},
+      {:hackney, "~> 1.14.3"},
       {:mix_test_watch, "~> 0.9.0", only: :dev, runtime: false},
+      {:sparql_client, "~> 0.2.1"},
       {:remix, "~> 0.0.2", only: :dev}
     ]
   end
