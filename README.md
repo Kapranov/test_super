@@ -219,4 +219,70 @@ make start
 ./run.sh
 ```
 
+## Packages SPARQL extension
+
+```elixir
+# mix.exs
+defmodule TestSuper.MixProject do
+  use Mix.Project
+
+  # ...
+
+  defp deps do
+    [
+      {:ex_doc, "~> 0.19.1", only: :dev, runtime: false},
+      {:hackney, "~> 1.14.3"},
+      {:sparql_client, "~> 0.2.1"},
+    ]
+  end
+
+  # ...
+end
+
+# config/config.exs
+use Mix.Config
+
+if Mix.env == :dev do
+  config :tesla, :adapter, Tesla.Adapter.Hackney
+  # ...
+end
+
+ # ...
+
+# import_config "#{Mix.env()}.exs"
+```
+
+## Create Modules and Docs
+
+```bash
+cat << 'EOF' > .iex.exs
+import TestSuper
+import TestSuper.Client
+import TestSuper.Server
+EOF
+
+touch lib/test_super/client.ex
+touch lib/test_super/server.ex
+```
+
+```elixir
+defmodule TestSuper do
+  @moduledoc """
+  Top-level module used in "Robust compute for RDF queries".
+  """
+end
+
+defmodule TestSuper.Client do
+  @moduledoc """
+  Module providing client-side functions for `GenServer`.
+  """
+end
+
+defmodule TestSuper.Server do
+  @moduledoc """
+  Module providing server-side functions for `GenServer`.
+  """
+end
+```
+
 ### 1 November 2018 by Oleg G.Kapranov
