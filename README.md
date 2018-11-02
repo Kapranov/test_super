@@ -743,4 +743,31 @@ can be optimized by doing `[_, _]`? I think `length(x) == 0` makes sense
 because it's simple, common, and you can replace it with `x == []`
 instead of pattern matching.
 
+There's also a slight change in semantics that has to be considered.
+`length(x) == 0` will fail on improper lists, while `x == []` will just
+return false. For example:
+
+```elixir
+def foo(x) when length(x) == 0 or hd(x) == nil, do: :nothing
+def foo(_), do: :something
+
+def bar(x) when x == [] or hd(x) == nil, do: :nothing
+def bar(x), do: :something
+
+# Gives different results in some situations:
+
+foo([nil | nil]) #=> :something
+bar([nil | nil]) #=> :nothing
+```
+
+And even tough, I guess it continues to be a bad practice anyways, if
+they use it expecting this kind of behavior, they should change it to
+something like:
+
+```elixir
+def bar(x) when x == [] or hd(x) == nil, do: :nothing
+def bar(x) when tl(x) == nil, do: :something
+def bar(x), do: :something
+```
+
 ### 2 November 2018 by Oleg G.Kapranov
