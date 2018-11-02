@@ -611,7 +611,10 @@ defmodule TestSuper.Client do
     {:ok, result} = Client.query(q, @service)
 
     # parse query result set
-    if length(result.results) == 0 do
+    # it's not correct for an elixir also not a good practice
+    # if length(result.results) == 0 do
+    # that is correct
+    if result.results == [] do
       {rand, "(not found)"}
     else
       id = result
@@ -721,5 +724,23 @@ this:
 
 So, that's a `GenServer` process storing key/value state for the results
 from our SPARQL queries.
+
+## Warning on the use of length(x) == 0 by Credo
+
+A good error message says what went wrong, why and how to fix it. So
+what is missing on this error message is exactly why `length(...) == 0`
+is a bad practice. Here is what I would use:
+
+I've also thought about it. It is also not a good practice, but I guess
+the point is that `length(x) == 0` is something people are very used to
+do in other languages, on which this isn't a bad practice, since `[]`
+are not lists and yes arrays - is that correct?
+
+`length(x) == 0` is a common pattern that says "if the list is empty".
+Lists with one element can still be checked by matching on `[_]` more
+efficiently, but then when do we stop? Do we say that `length(x) == 2`
+can be optimized by doing `[_, _]`? I think `length(x) == 0` makes sense
+because it's simple, common, and you can replace it with `x == []`
+instead of pattern matching.
 
 ### 2 November 2018 by Oleg G.Kapranov

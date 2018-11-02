@@ -67,7 +67,7 @@ defmodule TestSuper.Client do
 
     {:ok, result} = Client.query(q, @service)
 
-    if length(result.results) == 0 do
+    if result.results == [] do
       {rand, "(not found)"}
     else
       id = result
