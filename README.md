@@ -770,4 +770,16 @@ def bar(x) when tl(x) == nil, do: :something
 def bar(x), do: :something
 ```
 
+I wouldn't expect to see that kind of code, but the behaviour is there
+currently. I guess a warning is fine, but that's one of the reasons why
+the `length` check can't be optimised by the compiler.
+
+Yep... At least not replacing them by `list == []`.
+
+There is actually ways to optimize, creating functions like
+`length_equals?` that traverse the items, but just while it needs to,
+and imitating the behaviour of length for malformed lists. But I guess
+that's not the intention for now, and I don't know if we can consider
+it a clean solution.
+
 ### 2 November 2018 by Oleg G.Kapranov
