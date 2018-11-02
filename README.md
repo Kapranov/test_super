@@ -318,6 +318,7 @@ defmodule TestSuper.Server do
     case GenServer.start_link(__MODULE__, opts) do
       {:ok, pid} ->
         # register process name
+        # Process.register(pid, __MODULE__)
         num = String.replace("#{inspect pid}", "#PID", "")
         Process.register(pid, Module.concat(__MODULE__, num))
         {:ok, pid}
@@ -782,4 +783,65 @@ and imitating the behaviour of length for malformed lists. But I guess
 that's not the intention for now, and I don't know if we can consider
 it a clean solution.
 
+## Add in a dynamic supervision tree
+
+Now the on current example was for a static supervision tree. We could have
+added more `GenServer` proceeses under a single `Supervisor`, or even
+built up a tree with many levels by adding `Supervisor` processes under
+a `Supervisor`.
+
+```elixir
+# lib/test_super/application.ex
+defmodule TestSuper.Application do
+  @moduledoc """
+  Module providing the `Application` start function.
+  """
+
+  use Application
+
+  def start(_type, _args) do
+    children = [
+      TestSuper.Server
+    ]
+
+    opts = [strategy: :one_for_one, name: TestSuper.Supervisor]
+    Supervisor.start_link(children, opts)
+  end
+end
+```
+
+```bash
+bash> make all
+
+iex> :observer.start
+
+<0.240.0> -> <0.241.0> -> Elixir.TestSuper.Supervisor -> Elixir.TestSuper.Server.<0.243>
+
+iex> Process.alive?(pid(0,243,0))
+#=> true
+
+iex> Process.whereis TestSuper.Supervisor
+#=> #PID<0.242.0>
+
+iex> Process.whereis :"Elixir.TestSuper.Server.<0.243.0>"
+#=> #PID<0.243.0>
+
+iex> pid = pid(0,243,0)
+#=> true
+
+iex> Proccess.info(pid)
+
+iex> putq(pid)
+iex> get(pid)
+iex> get(pid, 14119)
+iex> for _ <- 1..5, do: putq(pid)
+iex> get(pid)
+```
+
 ### 2 November 2018 by Oleg G.Kapranov
+
+[1]: https://www.manning.com/books/elixir-in-action
+[2]: https://github.com/uwiger/gproc
+[3]: https://github.com/brianstorti/elixir-registry-example-chat-app
+[4]: https://medium.com/@StevenLeiva1/elixir-process-registries-a27f813d94e3
+[5]: https://www.brianstorti.com/process-registry-in-elixir/

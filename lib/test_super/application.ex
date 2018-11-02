@@ -6,7 +6,9 @@ defmodule TestSuper.Application do
   use Application
 
   def start(_type, _args) do
-    children = []
+    children = [
+      TestSuper.Server
+    ]
 
     opts = [strategy: :one_for_one, name: TestSuper.Supervisor]
     Supervisor.start_link(children, opts)
