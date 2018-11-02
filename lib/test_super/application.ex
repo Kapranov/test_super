@@ -5,12 +5,46 @@ defmodule TestSuper.Application do
 
   use Application
 
-  def start(_type, _args) do
+  @doc """
+  Application `start/2` function calls`_start/3` with boolean `flag`.
+
+  The boolean `flag` arg on the `_start/3` call selects a dynamic supervision
+  tree on `true`, and a static supervision tree on `false`. Initial setting
+  is `false`, i.e. selects for a static supervision tree.
+  """
+  def start(type, args) do
+    _start(type, args, false)
+  end
+
+  @doc false
+  defp _start(type, args, flag) do
+    case flag do
+      false -> _static_start(type, args)
+      true -> _dynamic_start(type, args)
+    end
+  end
+
+  @doc false
+  defp _static_start(_type, _args) do
     children = [
       TestSuper.Server
     ]
 
-    opts = [strategy: :one_for_one, name: TestSuper.Supervisor]
+    opts = [
+      name: TestSuper.Supervisor,
+      strategy: :one_for_one
+    ]
+
     Supervisor.start_link(children, opts)
+  end
+
+  @doc false
+  defp _dynamic_start(_type, _args) do
+    opts = [
+      name: TestSuper.DynamicSupervisor,
+      strategy: :one_for_one
+    ]
+
+    DynamicSupervisor.start_link(opts)
   end
 end
