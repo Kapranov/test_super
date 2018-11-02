@@ -112,20 +112,20 @@ iex -S mix
 
 Easier terminal styling:
 
-```elixir
-IO.puts ExChalk.red("Hello world!")
+```bash
+iex> IO.puts ExChalk.red("Hello world!")
 
-"hello"
-  |> ExChalk.gray
-  |> ExChalk.bg_cyan
-  |> ExChalk.italic
-  |> IO.puts
+iex> "hello"
+       |> ExChalk.gray
+       |> ExChalk.bg_cyan
+       |> ExChalk.italic
+       |> IO.puts
 
-"Hello world!"
-  |> ExChalk.red
-  |> ExChalk.italic
-  |> ExChalk.bg_blue
-  |> IO.puts
+iex> "Hello world!"
+       |> ExChalk.red
+       |> ExChalk.italic
+       |> ExChalk.bg_blue
+       |> IO.puts
 ```
 
 ## Create Makefile for running project
@@ -514,4 +514,212 @@ see now we have a map with entries.
 
 So, that's a `GenServer` process storing key/value state.
 
-### 1 November 2018 by Oleg G.Kapranov
+## GenServer by storing SPARQL results
+
+Let's add some support now to our `TestSuper.Client` module for querying
+DBpedia. First, as in previous posts, we'll store a SPARQL query
+`dbpedia_query.rq` in our `/priv/queries/` directory.
+
+```bash
+mkdir -p priv/queries/
+touch priv/queries/dbpedia_query.rq
+```
+
+```
+# priv/queries/dbpedia_query.rq
+prefix dbo: <http://dbpedia.org/ontology/>
+prefix foaf: <http://xmlns.com/foaf/0.1/>
+prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+select *
+where {
+  bind (12345 as ?id)
+  ?s dbo:wikiPageID ?id .
+  optional { ?s foaf:isPrimaryTopicOf ?topic }
+  optional { ?s rdfs:label ?label }
+  filter (langMatches(lang(?label), "en"))
+} limit 1
+```
+
+The `query/0` function just reads the query from the `priv/queries/`
+directory. We can try this out.
+
+```bash
+iex> query |> IO.puts
+#=> prefix dbo: <http://dbpedia.org/ontology/>
+    prefix foaf: <http://xmlns.com/foaf/0.1/>
+    prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+    select *
+    where {
+      bind (12345 as ?id)
+      ?s dbo:wikiPageID ?id .
+      optional { ?s foaf:isPrimaryTopicOf ?topic }
+      optional { ?s rdfs:label ?label }
+      filter (langMatches(lang(?label), "en"))
+    } limit 1
+
+    :ok
+```
+
+This query will look for a resource with a `dbo:wikiPageID` of `12345`.
+It will add in `foaf:isPrimaryTopicOf` and `rdfs:label` properties if
+present, and filter for English-language labels.
+
+```elixir
+defmodule TestSuper.Client do
+  @moduledoc """
+  Module providing client-side functions for `GenServer`.
+  """
+
+  alias SPARQL.Client
+  alias SPARQL.Query.Result
+
+  @priv_dir "#{:code.priv_dir(:test_super)}"
+  @queries_dir @priv_dir <> "/queries/"
+  @query_file "dbpedia_query.rq"
+  @service "http://dbpedia.org/sparql"
+
+  @doc """
+  Store SPARQL query results for `GenServer` with process ID `pid`.
+  """
+  def putq(pid) do
+    {key, value} = _do_query()
+    IO.puts "#{inspect key} => #{inspect value}"
+    GenServer.cast(pid, {:put, key, value})
+  end
+
+  @doc """
+  Return default SPARQL query used for demo.
+  """
+  def query do
+    File.read!(@queries_dir <> @query_file)
+  end
+
+  @doc """
+  Return default SPARQL endpoint used for demo.
+  """
+  def service, do: @service
+
+  @doc false
+  defp _do_query do
+    # rewrite query with new random wikiPageID
+    rand = Integer.to_string(Enum.random(1..50_000))
+    q = String.replace(query(), "12345", rand)
+
+    # send query
+    {:ok, result} = Client.query(q, @service)
+
+    # parse query result set
+    if length(result.results) == 0 do
+      {rand, "(not found)"}
+    else
+      id = result
+           |> Result.get(:id)
+           |> List.first
+
+      s = result
+          |> Result.get(:s)
+          |> List.first
+
+      label = result
+              |> Result.get(:label)
+              |> List.first
+
+      topic = result
+              |> Result.get(:topic)
+              |> List.first
+
+      {id.value, {s.value, label.value, topic.value}}
+    end
+  end
+end
+```
+
+So here we have the first function client call `putq/0` which will send
+the results from a query to a `GenServer` for storing.
+
+The second (private) function `_do_query/0` does the actual querying and
+parses the result set. It first generates a new random `dbo:wikiPageID`
+and replaces that ID in the query string. The modified query is sent to
+the DBpedia SPARQL endpoint using `SPARQL.Client.query/2`. The result
+set is tested and if empty a tuple `{rand, "(not found)"}` is returned.
+Otherwise the `?id`, `?s`, ? `label` and `?topic` variables are parsed
+out of the first result and returned in the tuple:
+`{id.value, {s.value, label.value, topic.value}}`.
+
+We can try this out in IEx.
+
+```bash
+pid = genserver
+#=> TestSuper.Server is starting ... #PID<0.285.0>
+    #PID<0.285.0>
+
+putq(pid)
+#=> 19167 => {"http://dbpedia.org/resource/Manuscript",
+    "Manuscript", "http://en.wikipedia.org/wiki/Manuscript"}
+    :ok
+
+get(pid)
+#=> %{
+      19167 => {"http://dbpedia.org/resource/Manuscript", "Manuscript",
+      "http://en.wikipedia.org/wiki/Manuscript"},
+      "13701" => "(not found)"
+    }
+
+get(pid, 19167)
+#=> {"http://dbpedia.org/resource/Manuscript", "Manuscript",
+     "http://en.wikipedia.org/wiki/Manuscript"}
+```
+
+Or for querying (and storing) in bulk:
+
+```bash
+for _ <- 1..5, do: putq(pid)
+#=> "47144" => "(not found)"
+    "4144" => "(not found)"
+    48913 => {"http://dbpedia.org/resource/Caroline_of_Brunswick",
+    "http://en.wikipedia.org/wiki/Caroline_of_Brunswick"}
+    38121 => {"http://dbpedia.org/resource/Peperomia",
+    "Peperomia", "http://en.wikipedia.org/wiki/Peperomia"}
+    "28041" => "(not found)"
+    [:ok, :ok, :ok, :ok, :ok]
+```
+
+And we can get this back as:
+
+```bash
+get(pid)
+#=> %{
+      19167 => {"http://dbpedia.org/resource/Manuscript", "Manuscript",
+      "http://en.wikipedia.org/wiki/Manuscript"},
+      38121 => {"http://dbpedia.org/resource/Peperomia", "Peperomia",
+      "http://en.wikipedia.org/wiki/Peperomia"},
+      48913 => {"http://dbpedia.org/resource/Caroline_of_Brunswick",
+      "Caroline of Brunswick",
+      "http://en.wikipedia.org/wiki/Caroline_of_Brunswick"},
+      "13701" => "(not found)",
+      "28041" => "(not found)",
+      "4144" => "(not found)",
+      "47144" => "(not found)"
+    }
+```
+
+Note that this includes both the single result we stored earlier
+(`19167`), as well as the bulk query results (`38121`, `48913`, `13701`,
+`28041`, `4144`, `47144`).
+
+Now we can again inspect the state stored in the `GenServer` process
+with the `observer` tool: `:observer.start`
+
+If we choose the 'Processes' tab, sort the processes by clicking on the
+'Pid' heading , and select the `GenServer` process  we just created
+(`#PID<0.285.0>`) we have the following screen. Double clicking on this
+process and choosing the 'State' tab gives us this screen showing the
+state. And if we click the link 'Click to expand above term' we get
+this:
+
+So, that's a `GenServer` process storing key/value state for the results
+from our SPARQL queries.
+
+### 2 November 2018 by Oleg G.Kapranov

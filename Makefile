@@ -53,8 +53,6 @@ credo:
 			$(V)mix credo --strict
 			$(V)mix coveralls
 
-all: test
-
 run: kill clean packs
 			$(V)iex -S mix
 
@@ -65,5 +63,7 @@ halt: kill
 start: kill
 			$(V)echo -en "\n\t$(STAT_COLOR) Run server http://localhost:$(NO_COLOR)$(INFO_COLOR)PORT$(NO_COLOR)\n"
 			$(V)iex -S mix
+
+all: test credo report start
 
 .PHONY: test halt
