@@ -23,6 +23,23 @@ defmodule TestSuper do
   end
 
   @doc """
+  Constructor for new `GenServer` (with `DynamicSupervisor`).
+
+  Returns process ID for `GenServer`.
+  """
+  def genserver_d do
+    case DynamicSupervisor.start_child(
+        TestSuper.DynamicSupervisor, TestSuper.Server
+      ) do
+      {:ok, pid} ->
+        IO.puts "TestSuper.Server is starting ... #{inspect pid}"
+        pid
+      {:error, reason} ->
+        IO.puts "! Error: #{inspect reason}"
+    end
+  end
+
+  @doc """
   Constructor for new `Supervisor` (with `GenServer`).
 
   Returns process ID for `Supervisor`.

@@ -13,7 +13,7 @@ defmodule TestSuper.Application do
   is `false`, i.e. selects for a static supervision tree.
   """
   def start(type, args) do
-    _start(type, args, false)
+    _start(type, args, true)
   end
 
   @doc false

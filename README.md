@@ -939,6 +939,8 @@ that we can then use the `Observer` to view our `Supervisor` and its
 `GenServer`.
 
 ```bash
+bash> make all
+
 iex> :observer.start
 ```
 
@@ -948,7 +950,7 @@ and see at left the list of applications being used here. Our
 link through to the `Supervisor` and its attached `GenServer`.
 
 If we now double click the `GenServer` process button
-`Elixir.TestSuper.Server.<0.252.0>` we will open up in the 'Process
+`Elixir.TestSuper.Server.<0.243.0>` we will open up in the 'Process
 information' tab. And if we select the 'State' tab we'll get this.
 
 We can again try adding state as before and viewing here. (Note that the
@@ -960,10 +962,26 @@ we're going to have to create a process ID for our client functions
 which we can do with the `pid/3` function:
 
 ```bash
-iex> pid = pid(0,252,0)
-#=> #PID<0.252.0>
-```
+<0.240.0> -> <0.241.0> -> Elixir.TestSuper.Supervisor -> Elixir.TestSuper.Server.<0.243>
 
+iex> Process.alive?(pid(0,240,0))
+#=> true
+iex> Process.alive?(pid(0,241,0))
+#=> true
+iex> Process.whereis Elixir.TestSuper.Supervisor
+#=> #PID<0.242.0>
+iex> Process.alive?(pid(0,242,0))
+#=> true
+iex> Process.whereis :"Elixir.TestSuper.Server.<0.243.0>"
+#=> #PID<0.243.0>
+iex> Process.alive?(pid(0,243,0))
+#=> true
+iex> pid = pid(0,243,0)
+#=> true
+iex> Proccess.info(pid)
+iex> pid = pid(0,243,0)
+#=> #PID<0.243.0>
+```
 And now we can send requests to the `GenServer`:
 
 ```bash
@@ -977,6 +995,11 @@ iex> putq(pid)
 #=> 35621 => {"http://dbpedia.org/resource/2_Timothy", "2 Timothy",
     "http://en.wikipedia.org/wiki/2_Timothy"}
     :ok
+
+iex> get(pid)
+iex> get(pid, 35621)
+iex> for _ <- 1..5, do: putq(pid)
+iex> get(pid)
 ```
 
 And if we close and repoen the 'State' tab we'll see the new state we
@@ -992,7 +1015,7 @@ and ...
 
 Look at that. It's the same as before (almost), but now the `GenServer`
 process has been automatically restarted (albeit with a different
-process ID, `#PID<0.318.0>`  instead of `#PID<0.252.0>` ).
+process ID, `#PID<0.3961.0>`  instead of `#PID<0.243.0>` ).
 
 Now if there was any state stored in the process then that will have
 been erased. We're back to a blank slate. We need other strategies to
@@ -1007,12 +1030,150 @@ added more `GenServer` proceeses under a single `Supervisor`, or even
 built up a tree with many levels by adding `Supervisor` processes under
 a `Supervisor`.
 
+But now let's look at how to create a dynamic supervision tree. Let's
+first create ourselves a `TestSuper.DynamicSupervisor` module.
+
 ```bash
-touch lib/test_super/supervisor.ex
+touch lib/test_super/dynamic.ex
 ```
 
 ```elixir
-# lib/test_super/application.ex
+# lib/test_super/dynamic.ex
+defmodule TestSuper.DynamicSupervisor do
+  @moduledoc """
+  Module providing server-side functions for `DynamicSupervisor`.
+  """
+
+  use DynamicSupervisor
+
+  ## Constructor
+
+  @doc """
+  Constructor for `DynamicSupervisor`.
+  """
+  def start_link(opts \\ []) do
+    DynamicSupervisor.start_link(__MODULE__, [], opts)
+  end
+
+  ## Callbacks
+
+  @doc """
+  `DynamicSupervisor` callback `init/1`.
+  """
+  def init([]) do
+    opts = [
+      name: TestSuper.DynamicSupervisor,
+      strategy: :one_for_one
+    ]
+
+    DynamicSupervisor.init(opts)
+  end
+end
+```
+
+And again we also want a more friendly means to start this up. Let's
+add this to the main `TestSuper` module.
+
+
+```elixir
+@doc """
+Constructor for new `DynamicSupervisor`.
+
+Returns process ID for `DynamicSupervisor`.
+"""
+def supervisor_d() do
+  opts = [
+    name: TestSuper.DynamicSupervisor,
+    strategy: :one_for_one
+  ]
+
+  case TestSuper.DynamicSupervisor.start_link(opts) do
+    {:ok, pid} ->
+      IO.puts "TestSuper.DynamicSupervisor is starting ... #{inspect pid}"
+      pid
+    {:error, reason} ->
+      IO.puts "! Error: #{inspect reason}"
+  end
+end
+```
+
+```elixir
+# lib/test_super.ex
+
+defmodule TestSuper do
+  @moduledoc """
+  Top-level module used in "Robust compute for RDF queries".
+  """
+
+  alias TestSuper.Server
+
+  @doc """
+  Constructor for new `GenServer` (with no supervision).
+
+  Returns process ID for `GenServer`.
+  """
+  def genserver do
+    opts = [
+    ]
+    case Server.start_link(opts) do
+      {:ok, pid} ->
+        IO.puts "TestSuper.Server is starting ... #{inspect pid}"
+        pid
+      {:error, reason} ->
+        IO.puts "! Error: #{inspect reason}"
+    end
+  end
+
+  @doc """
+  Constructor for new `GenServer` (with `DynamicSupervisor`).
+
+  Returns process ID for `GenServer`.
+  """
+  def genserver_d do
+    case DynamicSupervisor.start_child(
+        TestSuper.DynamicSupervisor, TestSuper.Server
+      ) do
+      {:ok, pid} ->
+        IO.puts "TestSuper.Server is starting ... #{inspect pid}"
+        pid
+      {:error, reason} ->
+        IO.puts "! Error: #{inspect reason}"
+    end
+  end
+
+  @doc """
+  Constructor for new `Supervisor` (with `GenServer`).
+
+  Returns process ID for `Supervisor`.
+  """
+  def supervisor do
+    opts = [
+      name: TestSuper.Supervisor,
+      strategy: :one_for_one
+    ]
+
+    case TestSuper.Supervisor.start_link(opts) do
+      {:ok, pid} ->
+        [{_, child_pid, _, _}] = Supervisor.which_children(pid)
+        IO.puts "TestSuper.Supervisor is starting ... #{inspect pid}"
+        IO.puts "TestSuper.Server is starting ... #{inspect child_pid}"
+        pid
+      {:error, reason} ->
+        IO.puts "! Error: #{inspect reason}"
+    end
+  end
+end
+```
+
+This `supervisor_d/0` constructor function is pretty much the same as
+the `supervisor/0` constructor.
+
+But again we can just use the `Application` to start up our
+`DynamicSupervisor` process. For now let's just flip the `false`arg in
+the `TestSuper.Application` module to `true` on the `start/2` function
+to read as:
+
+```elixir
 defmodule TestSuper.Application do
   @moduledoc """
   Module providing the `Application` start function.
@@ -1020,61 +1181,132 @@ defmodule TestSuper.Application do
 
   use Application
 
-  def start(_type, _args) do
-    children = [
-      TestSuper.Server
-    ]
+  @doc """
+  Application `start/2` function calls`_start/3` with boolean `flag`.
 
-    opts = [strategy: :one_for_one, name: TestSuper.Supervisor]
-    Supervisor.start_link(children, opts)
+  The boolean `flag` arg on the `_start/3` call selects a dynamic supervision
+  tree on `true`, and a static supervision tree on `false`. Initial setting
+  is `false`, i.e. selects for a static supervision tree.
+  """
+  def start(type, args) do
+    _start(type, args, true)
   end
+
+  # ...
 end
 ```
+And let's restart IEx.
 
 ```bash
 bash> make all
 
 iex> :observer.start
-
-<0.240.0> -> <0.241.0> -> Elixir.TestSuper.Supervisor -> Elixir.TestSuper.Server.<0.243>
-
-iex> Process.alive?(pid(0,243,0))
-#=> true
-
-iex> Process.whereis TestSuper.Supervisor
-#=> #PID<0.242.0>
-
-iex> Process.whereis :"Elixir.TestSuper.Server.<0.243.0>"
-#=> #PID<0.243.0>
-
-iex> pid = pid(0,243,0)
-#=> true
-
-iex> Proccess.info(pid)
-
-iex> putq(pid)
-iex> get(pid)
-iex> get(pid, 14119)
-iex> for _ <- 1..5, do: putq(pid)
-iex> get(pid)
 ```
 
-But now let's look at how to create a dynamic supervision tree. Let's
-first create ourselves a create ourselves `TestSuper.DynamicSupervisor`
-module.
+Now this time we only have the `DynamicServer`. There are no child
+`GenServer` processes attached.
 
-```elixir
-defmodule TestSuper.DynamicSupervisor do
-  @moduledoc """
-  Module providing server-side functions for `DynamicSupervisor`.
-  """
-end
+Let's add a `GenServer`.
+
+```bash
+<0.249.0> -> <0.250.0> -> Elixir.TestSuper.DynamicSupervisor
+
+iex> iex(2)> Process.whereis Elixir.TestSuper.DynamicSupervisor
+#=> #PID<0.251.0>
+
+iex> pid = pid(0,251,0)
+#=> #PID<0.251.0>
+
+iex> Process.info(pid)
+
+iex> genserver_d
+#=> #PID<0.272.0>
 ```
 
-### 2 November 2018 by Oleg G.Kapranov
+Now we can see this atached. And, in fact, this looks very similar to
+the previous static supervision tree example.
+
+
+```bash
+<0.240.0> -> <0.241.0> -> Elixir.TestSuper.DynamicSupervisor -> Elixir.TestSuper.Server.<0.272.0>
+```
+
+Let's add another `GenServer`.
+
+```bash
+iex> genserver_d
+#=> #PID<0.284.0>
+
+<0.240.0> -> <0.241.0> -> Elixir.TestSuper.DynamicSupervisor
+                                          |
+                                          V
+                          Elixir.TestSuper.Server.<0.272.0>
+                          Elixir.TestSuper.Server.<0.284.0>
+```
+
+And now we can see two child `GenServer` processes for the
+`DynamicSupervisor`.
+
+Let's go crazy and add ten `GenServer` child processes.
+
+```bash
+iex> for _ <- 1..10, do: genserver_d
+#=> [#PID<0.297.0>, #PID<0.298.0>, #PID<0.299.0>,
+     #PID<0.300.0>, #PID<0.301.0>, #PID<0.302.0>,
+     #PID<0.303.0>, #PID<0.304.0>, #PID<0.305.0>,
+     #PID<0.306.0>]
+
+<0.240.0> -> <0.241.0> -> Elixir.TestSuper.DynamicSupervisor
+                                          |
+                                          V
+                          Elixir.TestSuper.Server.<0.272.0>
+                          Elixir.TestSuper.Server.<0.284.0>
+                          Elixir.TestSuper.Server.<0.297.0>
+                          Elixir.TestSuper.Server.<0.298.0>
+                          Elixir.TestSuper.Server.<0.299.0>
+                          Elixir.TestSuper.Server.<0.300.0>
+                          Elixir.TestSuper.Server.<0.301.0>
+                          Elixir.TestSuper.Server.<0.302.0>
+                          Elixir.TestSuper.Server.<0.303.0>
+                          Elixir.TestSuper.Server.<0.304.0>
+                          Elixir.TestSuper.Server.<0.305.0>
+                          Elixir.TestSuper.Server.<0.306.0>
+```
+
+Yup.
+
+That's right. The `DynamicSupervisor` here is managing a dozen
+`GenServer` processes, but could just as easily be twelve thousand,
+or more.
+
+
+I've shown here how to manage fault tolerance in Elixir with
+supervision trees. We first reviewed the process model for Erlang
+(Elixir) and then discussed some of the abstraction patterns that OTP
+provides for processes: agents, servers, supervisors, and tasks.
+
+We then developed a demo to show how the `GenServer` process can be
+used to store state. In this example we used a map to maintain a
+key/value store. We also made use of the `SPARQL.Client.ex` package
+to query DBpedia and to save our results into the `GenServer`.
+
+We then showed how both static and dynamic supervision trees may be
+created for managing child processes using the `Supervisor` and
+`DynamicSupervisor` patterns. Using the `Observer` we showed how child
+processes can be killed and get restarted automatically by the
+`Supervisor`.
+
+It is this support for fault tolerance and distributed compute that
+makes Elxir such a fascinating candidate for semantic web applications.
+
+### 3 November 2018 by Oleg G.Kapranov
 
 [1]: https://www.manning.com/books/elixir-in-action
-[2]: https://github.com/uwiger/gproc
-[3]: https://github.com/brianstorti/elixir-registry-example-chat-app
-[4]: https://medium.com/@StevenLeiva1/elixir-process-registries-a27f813d94e3
-[5]: https://www.brianstorti.com/process-registry-in-elixir/
+[2]: https://github.com/brianstorti/elixir-registry-example-chat-app
+[3]: https://medium.com/@StevenLeiva1/elixir-process-registries-a27f813d94e3
+[4]: https://www.brianstorti.com/process-registry-in-elixir/
+[5]: https://github.com/boydm/scenic
+[6]: https://github.com/boydm/scenic_new
+[7]: https://gitlab.com/martinstannard/petri
+[8]: https://gitlab.com/martinstannard/turtles
+[9]: https://github.com/tonyhammond/examples
